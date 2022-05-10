@@ -44,17 +44,17 @@ import lib.cardano.cardano_utils as cardano
 import lib.stacks.c32 as c32
 
 # Enable functions that may not work for some standard libraries in some environments
+hashlib_ripemd160_available = False
 
 try:
     # this will work with micropython and python < 3.10
     # but will raise and exception if ripemd is not supported (python3.10, openssl 3)
-    raise()
     hashlib.new('ripemd160')
+    hashlib_ripemd160_available = True
     def ripemd160(msg):
         return hashlib.new('ripemd160', msg).digest()
 except:
     # otherwise use pure python implementation
-    print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
     from lib.embit.py_ripemd160 import ripemd160
 
 # Import modules from requirements.txt
@@ -313,6 +313,8 @@ class WalletBase(object):
     _savevalidseeds = False
 
     def __init__(self, loading = False):
+        if not hashlib_ripemd160_available:
+            print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
         assert loading, "use load_from_filename or create_from_params to create a " + self.__class__.__name__
 
     @staticmethod

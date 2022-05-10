@@ -43,11 +43,14 @@ try:
 except:
     pass
 
+hashlib_ripemd160_available = False
+
 # Enable functions that may not work for some standard libraries in some environments
 try:
     # this will work with micropython and python < 3.10
     # but will raise and exception if ripemd is not supported (python3.10, openssl 3)
     hashlib.new('ripemd160')
+    hashlib_ripemd160_available = True
     def ripemd160(msg):
         return hashlib.new('ripemd160', msg).digest()
 except:
@@ -3223,6 +3226,9 @@ class WalletBither(object):
             return False
 
     def __init__(self, loading = False):
+        if not hashlib_ripemd160_available:
+            print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
+
         assert loading, 'use load_from_* to create a ' + self.__class__.__name__
         # loading crypto libraries is done in load_from_*
 
@@ -4282,6 +4288,8 @@ class WalletBrainwallet(object):
     def __init__(self, addresses = None, addressdb = None, check_compressed = True, check_uncompressed = True,
                  force_check_p2sh = False, isWarpwallet = False, salt = None, crypto = 'bitcoin', is_performance = False):
         global hmac, coincurve, base58, pylibscrypt
+        if not hashlib_ripemd160_available:
+            print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
         import lib.pylibscrypt as pylibscrypt
         from lib.cashaddress import base58
         import hmac
@@ -4588,6 +4596,9 @@ class WalletRawPrivateKey(object):
     def __init__(self, addresses = None, addressdb = None, check_compressed = True, check_uncompressed = True,
                  force_check_p2sh = False, crypto = 'bitcoin', is_performance = False):
         global hmac, coincurve, base58
+        if not hashlib_ripemd160_available:
+            print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
+
         from lib.cashaddress import base58
         import hmac
         try:

@@ -366,13 +366,6 @@ def can_load_keccak():
 
 class TestRecoveryFromAddress(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        try:
-            hashlib.new("ripemd160")
-        except ValueError:
-            raise unittest.SkipTest("requires that hashlib implements RIPEMD-160")
-
     def address_tester(self, wallet_type, the_address, the_address_limit, correct_mnemonic, test_path=None,
                        pathlist_file=None, addr_start_index = 0, force_p2sh = False, checksinglexpubaddress = False, **kwds):
 
