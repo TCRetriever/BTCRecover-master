@@ -43,6 +43,17 @@ try:
 except:
     pass
 
+# Enable functions that may not work for some standard libraries in some environments
+try:
+    # this will work with micropython and python < 3.10
+    # but will raise and exception if ripemd is not supported (python3.10, openssl 3)
+    hashlib.new('ripemd160')
+    def ripemd160(msg):
+        return hashlib.new('ripemd160', msg).digest()
+except:
+    # otherwise use pure python implementation
+    from lib.embit.py_ripemd160 import ripemd160
+
 # Import modules from requirements.txt
 from Crypto.Cipher import AES
 
@@ -3367,7 +3378,7 @@ class WalletBither(object):
             privkey = cutils.int_to_bytes_padded( cutils.bytes_to_int(privkey) % cutils.GROUP_ORDER_INT )
             pubkey  = pubkey_from_secret(privkey).format(self._is_compressed)
             # Compute the hash160 of the public key, and check for a match
-            if hashlib_new("ripemd160", l_sha256(pubkey).digest()).digest() == self._pubkey_hash160:
+            if ripemd160(l_sha256(pubkey).digest()) == self._pubkey_hash160:
                 password = password.decode("utf_16_be", "replace")
                 return password, count
 
@@ -4407,13 +4418,14 @@ class WalletBrainwallet(object):
 
                 pubkey = pubkey_from_secret(privkey).format(compressed = isCompressed)
 
-                pubkey_hash160 = hashlib_new("ripemd160", l_sha256(pubkey).digest()).digest()
+                pubkey_hash160 = ripemd160(l_sha256(pubkey).digest())
 
                 for input_address_p2sh in self.address_type_checks:
                     if (input_address_p2sh):  # Handle P2SH Segwit Address
                         WITNESS_VERSION = "\x00\x14"
                         witness_program = WITNESS_VERSION.encode() + pubkey_hash160
-                        hash160 = hashlib.new("ripemd160", l_sha256(witness_program).digest()).digest()
+
+                        hash160 = ripemd160(l_sha256(witness_program).digest())
                     else:
                         hash160 = pubkey_hash160
 
@@ -4525,7 +4537,7 @@ class WalletBrainwallet(object):
 
             hash160s_standard = []
             for hashed_pubkey in clResult_hashed_pubkey:
-                hash160s_standard.append(hashlib_new("ripemd160", hashed_pubkey).digest())
+                hash160s_standard.append(ripemd160(hashed_pubkey))
 
             hash160s = []
             for pubkey_hash160 in hash160s_standard:
@@ -4533,7 +4545,7 @@ class WalletBrainwallet(object):
                     if (input_address_p2sh):  # Handle P2SH Segwit Address
                         WITNESS_VERSION = "\x00\x14"
                         witness_program = WITNESS_VERSION.encode() + pubkey_hash160
-                        hash160s.append(hashlib.new("ripemd160", l_sha256(witness_program).digest()).digest())
+                        hash160s.append(ripemd160(l_sha256(witness_program).digest()))
                     else:
                         hash160s.append(pubkey_hash160)
 
@@ -4714,13 +4726,13 @@ class WalletRawPrivateKey(object):
                 if self.crypto == 'ethereum':
                     pubkey_hash160 = keccak(pubkey[1:])[-20:]
                 else:
-                    pubkey_hash160 = hashlib_new("ripemd160", l_sha256(pubkey).digest()).digest()
+                    pubkey_hash160 = ripemd160(l_sha256(pubkey).digest())
 
                 for input_address_p2sh in self.address_type_checks:
                     if (input_address_p2sh):  # Handle P2SH Segwit Address
                         WITNESS_VERSION = "\x00\x14"
                         witness_program = WITNESS_VERSION.encode() + pubkey_hash160
-                        hash160 = hashlib.new("ripemd160", l_sha256(witness_program).digest()).digest()
+                        hash160 = ripemd160(l_sha256(witness_program).digest())
                     else:
                         hash160 = pubkey_hash160
 

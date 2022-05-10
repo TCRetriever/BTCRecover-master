@@ -43,6 +43,19 @@ import lib.bech32 as bech32
 import lib.cardano.cardano_utils as cardano
 import lib.stacks.c32 as c32
 
+# Enable functions that may not work for some standard libraries in some environments
+
+try:
+    # this will work with micropython and python < 3.10
+    # but will raise and exception if ripemd is not supported (python3.10, openssl 3)
+    raise()
+    hashlib.new('ripemd160')
+    def ripemd160(msg):
+        return hashlib.new('ripemd160', msg).digest()
+except:
+    # otherwise use pure python implementation
+    print("Warning: Native RIPEMD160 not available via Hashlib, using Pure-Python (This will significantly reduce performance)")
+    from lib.embit.py_ripemd160 import ripemd160
 
 # Import modules from requirements.txt
 try:
@@ -83,7 +96,6 @@ try:
     bitstring_available = True
 except:
     pass
-
 
 
 _T = TypeVar("_T")
@@ -343,7 +355,7 @@ class WalletBase(object):
         :return: ripemd160(sha256(compressed_pubkey))
         :rtype: str
         """
-        return hashlib.new("ripemd160", hashlib.sha256(compress_pubkey(uncompressed_pubkey)).digest()).digest()
+        return ripemd160(hashlib.sha256(compress_pubkey(uncompressed_pubkey)).digest())
 
     # Simple accessor to be able to identify the BIP44 coin number of the wallet
     def get_path_coin(self):
@@ -616,7 +628,8 @@ class WalletElectrum1(WalletBase):
                     d_pubkey  = coincurve.PublicKey.from_valid_secret(d_privkey).format(compressed=False)
 
                     # Compute the hash160 of the *uncompressed* public key, and check for a match
-                    if hashlib_new("ripemd160", l_sha256(d_pubkey).digest()).digest() in self._known_hash160s:
+
+                    if ripemd160(l_sha256(d_pubkey).digest()) in self._known_hash160s:
                         return mnemonic_ids, count  # found it
 
         return False, count
@@ -1067,7 +1080,7 @@ class WalletBIP32(WalletBase):
                         pubkey_hash160 = self.pubkey_to_hash160(d_pubkey)
                         WITNESS_VERSION = "\x00\x14"
                         witness_program = WITNESS_VERSION.encode() + pubkey_hash160
-                        test_hash160 = hashlib.new("ripemd160", hashlib.sha256(witness_program).digest()).digest()
+                        test_hash160 = ripemd160(hashlib.sha256(witness_program).digest())
 
                     #Basic comparison content for Debugging
                     #for hash160 in self._known_hash160s:
