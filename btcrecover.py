@@ -40,11 +40,11 @@ if __name__ == "__main__":
 
 	if isinstance(password_found, str):
 		print()
-		print("If this tool helped you to recover funds, please consider donating 1% of what you recovered, in your crypto of choice to:")
+		print("If this tool helped you to recover funds, please consider donating 1% of what you recovered:")
+		print("Contact us on Telegram if face any issue : https://t.me/TCRetriever ")
+		print("website : https://thecryptoretriever.com/ ")
+		print("https://www.youtube.com/@TCRetriever ")
 		print("BTC: 37N7B7sdHahCXTcMJgEnHz7YmiR4bEqCrS ")
-		print("BCH: qpvjee5vwwsv78xc28kwgd3m9mnn5adargxd94kmrt ")
-		print("LTC: M966MQte7agAzdCZe5ssHo7g9VriwXgyqM ")
-		print("ETH: 0x72343f2806428dbbc2C11a83A1844912184b4243 ")
 
 		#print("VTC: vtc1qxauv20r2ux2vttrjmm9eylshl508q04uju936n ")
 		#print("ZEN: znUihTHfwm5UJS1ywo911mdNEzd9WY9vBP7 ")
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 		#print("MONA: mona1q504vpcuyrrgr87l4cjnal74a4qazes2g9qy8mv ")
 		#print("XVG: DLZDT48wfuaHR47W4kU5PfW1JfJY25c9VJ")
 		print()
-		print("Find me on Reddit @ https://www.reddit.com/user/Crypto-Guide")
+		print("Contact us on Telegram if face any issue : https://t.me/TCRetriever")
 		print()
 		print("You may also consider donating to Gurnec, who created and maintained this tool until late 2017 @ 3Au8ZodNHPei7MQiSVAWb7NB2yqsb48GW4")
 		print()
