@@ -66,7 +66,7 @@ You can then re-run the command to install python3-pip from above.
 ### Android via Termux ###
 Some warnings and notes...
 
-* Termux is not automatically tested like other platforms... (So I won't be automatically notified if this process breaks)
+* Termux support remains experimental, but automated tests now run weekly via the Termux Docker container on GitHub Actions
   
 * Your phone may not have sufficient cooling to run BTCRecover for any meaninful length of time
   
@@ -79,6 +79,9 @@ Some warnings and notes...
 You will then need to install Python as well as some other packages (Mostly the Coincurve build requirements)
 
     pkg install python-pip git autoconf automake build-essential libtool pkg-config binutils-is-llvm rust
+
+  The `python-pip` package already includes PIP. Attempting to upgrade it with
+  `pip install --upgrade pip` will fail and is unnecessary.
 
 Once this is done, you can install the base requirements for BTCRecover that allow recovery of common wallet types. (The full requirements have a lot of packages and will take a long time to build, like 15-20 minutes or more...)
 
