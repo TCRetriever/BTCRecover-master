@@ -1531,7 +1531,8 @@ class WalletBIP39(WalletBIP32):
             for filename in glob.iglob(os.path.join(wordlists_dir, name + "-??*.txt")):
                 wordlist_langs.append(os.path.basename(filename)[len(name)+1:-4])  # e.g. "en", or "zh-hant"
         for lang in wordlist_langs:
-            assert lang not in cls._language_words, "wordlist not already loaded"
+            if lang in cls._language_words:
+                continue
             cls._language_words[lang] = load_wordlist(name, lang)
 
     @property
@@ -1904,10 +1905,16 @@ class WalletElectrum2(WalletBIP39):
     @classmethod
     def _load_wordlists(cls):
         assert not cls._language_words, "_load_wordlists() should only be called once from the first init()"
+        # Load all standard BIP39 wordlists first so Electrum2-specific
+        # lists cannot overwrite them if they share the same language code
+        cls._do_load_wordlists("bip39")
         cls._do_load_wordlists("electrum2")
-        cls._do_load_wordlists("bip39", ("en", "es", "ja", "zh-hans"))  # only the four bip39 ones used by Electrum2
+        for lang in list(cls._language_words):
+            words = cls._language_words[lang]
+            if len(words) == 2048 and lang in ("en", "es", "fr", "it", "pt", "cs"):
+                cls._language_words[lang + cls.FIRSTFOUR_TAG] = [w[:4] for w in words]
         assert all(len(w) >= 1411 for w in cls._language_words.values()), \
-               "Electrum2 wordlists are at least 1411 words long" # because we assume a max mnemonic length of 13
+               "Electrum2 wordlists are at least 1411 words long"  # because we assume a max mnemonic length of 13
 
     def __init__(self, path = None, loading = False):
         # Just calls WalletBIP39.__init__() with default Electrum path if none specified
