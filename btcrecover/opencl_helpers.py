@@ -100,6 +100,12 @@ def init_opencl_contexts(loaded_wallet, openclDevice=0):
         )
         return
 
+    # Password Recovery for MultiBit Wallets
+    elif type(loaded_wallet) is btcrecover.btcrpass.WalletMultiBit:
+        loaded_wallet.opencl_context_multibit_md5 = loaded_wallet.opencl_algo.cl_multibit_md5_init(
+            len(loaded_wallet._salt))
+        return
+
     # Password recovery for blockchain.com wallet second password
     elif type(loaded_wallet) is btcrecover.btcrpass.WalletBlockchainSecondpass:
         loaded_wallet.opencl_context_hash_iterations_sha256 = (
