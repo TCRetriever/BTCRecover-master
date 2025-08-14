@@ -65,7 +65,7 @@ if __name__ == "__main__":
                 print("DOGE: DMQ6uuLAtNoe5y6DCpxk2Hy83nYSPDwb5T ")
 
             print()
-            print("Contact us on Telegram if face any issue : https://t.me/TCRetriever ")
+            print("website : https://thecryptoretriever.com/ ")
             print()
             print(
                 "You may also consider donating to Gurnec, who created and maintained this tool until late 2017 @ 3Au8ZodNHPei7MQiSVAWb7NB2yqsb48GW4")
