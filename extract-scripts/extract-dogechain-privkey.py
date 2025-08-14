@@ -33,6 +33,13 @@ data = open(wallet_filename, "rb").read(64 * 2**20)  # up to 64M, typical size i
 #  dogechain files  are JSON encoded; try to parse it as such
 data = json.loads(data)
 
+# Only support the older type of wallet files (AES-CBC), not worth re-working this as wallet is discontinued
+try:
+    if data["cipher"] == "AES-GCM":
+        raise ValueError("Wallet extract creation doesn't support AES-GCM wallets at this time")
+except AttributeError:
+    pass
+
 payload = base64.b64decode(data["payload"])
 iter_count = data["pbkdf2_iterations"]
 salt = base64.b64decode(data["salt"])

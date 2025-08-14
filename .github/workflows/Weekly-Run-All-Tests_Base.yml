@@ -8,15 +8,21 @@ on:
     - cron: "0 0 * * 6"
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   build:
-
+    timeout-minutes: 20 # allow extra time for occasional slow tests
     runs-on: ${{matrix.os}}
+    continue-on-error: ${{ matrix.python-version == '3.9' || matrix.python-version == '3.14.0-rc.1' }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest, macos-latest] # Test all supported operating systems
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13'] # Test all suppoorted versions of Python
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14.0-rc.1'] # Test all supported versions of Python
+        exclude:
+          - os: windows-latest
+            python-version: '3.13'
 
     steps:
     - uses: actions/checkout@v2
@@ -28,13 +34,16 @@ jobs:
       run: |
         if [ "$RUNNER_OS" == "macOS" ]; then
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          brew install autoconf automake libffi libtool pkg-config
+          brew install autoconf automake libffi libtool pkg-config gnu-sed swig
         fi
       shell: bash
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install --require-hashes -r requirements.txt
+    - name: Install green on Windows (workaround for hanging tests on Github Actions)
+      if: runner.os == 'Windows'
+      run: pip install green
     - name: Run All Tests
       run: |
         python run-all-tests.py -vv

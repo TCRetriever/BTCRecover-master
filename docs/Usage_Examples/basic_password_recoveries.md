@@ -43,9 +43,9 @@ python btcrecover.py --bip38-enc-privkey 6PnZC9Snn1DHyvfEq9UKUmZwonqpfaWav6vRiSV
 
 ## BIP39 Passphrase Protected Wallets & Electrum "Extra Words"
 **Notes**
-The language used to refer to a BIP39 passpharse can vary betwen vendors. Sometimes it is talked about as a "25th word", other times a "plausible deniability passphrase" or sometimes just as "passphrase". Just note that this is different from your wallet password or PIN.
+The language used to refer to a BIP39 passphrase can vary between vendors. Sometimes it is talked about as a "25th word", other times a "plausible deniability passphrase" or sometimes just as "passphrase". Just note that this is different from your wallet password or PIN.
 
-The most common symptom of you having an error in your BIP39 passphrase is that your seed+passhrase will produce a set of completely empty accounts, with no balance or transaction history. (Every BIP39 passphrase is valid, so you will not get any kind of error message)
+The most common symptom of you having an error in your BIP39 passphrase is that your seed+passphrase will produce a set of completely empty accounts, with no balance or transaction history. (Every BIP39 passphrase is valid, so you will not get any kind of error message)
 
 While BIP39 seed recovery can benefit from GPU acceleration, this is currently not the case for recovering a BIP39 passphrase.
 
@@ -65,7 +65,7 @@ All of the example commands below have the address generation limit set to 10, s
     * Samourai Wallet
     * Coinomi
     * Mycelium
-    * Zillet (Referrs to BIP39 passphrase as a "password based" wallet type)
+    * Zillet (Refers to BIP39 passphrase as a "password based" wallet type)
     * Electrum
     * Exodus
 
@@ -343,6 +343,13 @@ Do a basic recovery with a command like the one below. (This command uses a samp
 python btcrecover.py --wallet ./btcrecover/test/test-wallets/bitgo_keycard_userkey.json --passwordlist ./docs/Usage_Examples/common_passwordlist.txt
 ```
 
+## Toastwallet Passphrase
+Do a basic recovery with a command like the one below. (This command uses a sample wallet file bunlded with BTCRecover)
+```
+python btcrecover.py --wallet ./btcrecover/test/test-wallets/toastwallet.txt --passwordlist ./docs/Usage_Examples/common_passwordlist.txt
+```
+_You can also dump the private keys from the wallet file by adding the `--dump-privkeys` argument_
+
 ## SLIP39 Passphrases
 This uses much of the same syntax as recovering BIP39 passphrases. BTCRecover currently supports most of the coins that are supported by the Trezor T.
 
@@ -358,8 +365,6 @@ Basic Ethereum Command, so need to specifcy the `--wallet-type` (But can leave o
 ```
 python btcrecover.py --slip39 --wallet-type ethereum --addrs 0x0Ef61684B1E671dcBee4D51646cA6247487Ef91a --addr-limit 10 --passwordlist ./docs/Usage_Examples/common_passwordlist.txt --slip39-shares "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard adjust muscle parcel sled crucial amazing mansion losing" "hearing echo academic agency deliver join grant laden index depart deadline starting duration loud crystal bulge gasoline injury tofu together"
 ```
-<br>
-
 ## Raw Private Keys##
 BTCRecover an also be used to recover from situations where you have a damaged private key. 
 
@@ -407,4 +412,10 @@ You can also do raw private key repair, even if you don't have a record of the c
 
 ```
 python btcrecover.py --rawprivatekey --addressdb ./btcrecover/test/test-addressdbs/addresses-BTC-Test.db --wallet-type bitcoin --max-tokens 1 --tokenlist ./docs/Usage_Examples/btc_privkey_tokenlist.txt
+```
+
+## XLM Wallets ##
+Basic XLM Wallet with the passphrase 'btcr-test-password'
+```
+python btcrecover.py --mnemonic "doctor giant eternal huge improve suit service poem logic dynamic crane summer exhibit describe later suit dignity ahead unknown fall syrup mirror nurse season" --addrs GBPYX2ELQ6YTAF7DXER7RCQJR2HXXFX6HUZKWEZD3B6RKOLDSJF7UGXK --addr-limit 2 --no-eta --wallet-type xlm --passwordlist ".\docs\Usage_Examples\common_passwordlist.txt"
 ```

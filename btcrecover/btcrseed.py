@@ -32,7 +32,6 @@ from typing import AnyStr, List, Optional, Sequence, TypeVar, Union
 # Import modules bundled with BTCRecover
 from . import btcrpass
 from .addressset import AddressSet
-from lib.bitcoinlib_mod import encoding as encoding_mod
 from lib.bitcoinlib import encoding
 from lib.cashaddress import convert, base58
 from lib.base58_tools import base58_tools
@@ -43,6 +42,15 @@ import lib.bech32 as bech32
 import lib.cardano.cardano_utils as cardano
 import lib.stacks.c32 as c32
 from lib.p2tr_helper import P2TR_tools
+
+# import bundled modules that won't work in some environments
+bundled_bitcoinlib_mod_available = False
+try:
+    from lib.bitcoinlib_mod import encoding as encoding_mod
+
+    bundled_bitcoinlib_mod_available = True
+except:
+    pass
 
 # Enable functions that may not work for some standard libraries in some environments
 hashlib_ripemd160_available = False
@@ -105,6 +113,15 @@ try:
 
     eth2_staking_deposit_available = True
 except:
+    pass
+
+shamir_mnemonic_available = False
+slip39_min_words = 20
+try:
+    import shamir_mnemonic
+    from shamir_mnemonic.constants import MIN_MNEMONIC_LENGTH_WORDS as slip39_min_words
+    shamir_mnemonic_available = True
+except Exception:
     pass
 
 
@@ -247,6 +264,33 @@ def load_passphraselist(passphraselistFile):
     passphraselist_file.close()
     return passphraselist
 
+import hmac
+import hashlib
+from struct import pack
+
+def get_master_key_and_chain_code(seed):
+    key = b"ed25519 seed"
+    I = hmac.new(key, seed, hashlib.sha512).digest()
+    return I[:32], I[32:]
+
+def derive_child_key(parent_key, parent_chain_code, index):
+    # Hardened index: index >= 0x80000000
+    assert index >= 0x80000000
+
+    data = b'\x00' + parent_key + pack(">L", index)
+    I = hmac.new(parent_chain_code, data, hashlib.sha512).digest()
+    return I[:32], I[32:]
+
+def derive_path(master_key, master_chain_code, path):
+    keys = (master_key, master_chain_code)
+    for index_str in path.lstrip("m/").split("/"):
+        hardened = index_str.endswith("'")
+        index = int(index_str.rstrip("'"))
+        if hardened:
+            index += 0x80000000
+        keys = derive_child_key(keys[0], keys[1], index)
+    return keys
+
 ################################### Wallets ###################################
 
 # A class decorator which adds a wallet class to a registered
@@ -356,12 +400,14 @@ class WalletBase(object):
                     try:
                         hash160 = binascii.unhexlify(encoding.addr_bech32_to_pubkeyhash(address, prefix=None,  include_witver=False, as_hex=True)) #Base58 conversion above will give a keyError if attempted with a Bech32 address for things like BTC
                     except Exception as e:
-                        # Try for some obscure altcoins which require modified versions of Bitcoinlib
-                        try:
-                            hash160 = binascii.unhexlify(encoding_mod.grs_addr_base58_to_pubkeyhash(address, True))
-                        except Exception as e:
-                            hash160 = binascii.unhexlify(encoding_mod.addr_bech32_to_pubkeyhash(address, prefix=None,  include_witver=False, as_hex=True)) #
-
+                        if bundled_bitcoinlib_mod_available:
+                            # Try for some obscure altcoins which require modified versions of Bitcoinlib
+                            try:
+                                hash160 = binascii.unhexlify(encoding_mod.grs_addr_base58_to_pubkeyhash(address, True))
+                            except Exception as e:
+                                hash160 = binascii.unhexlify(encoding_mod.addr_bech32_to_pubkeyhash(address, prefix=None,  include_witver=False, as_hex=True))
+                        else:
+                            print("Address not valid and unable to load modified bitcoinlib on this platform...")
 
             hash160s.add(hash160)
         return hash160s
@@ -581,7 +627,7 @@ class WalletElectrum1(WalletBase):
     # Performs basic checks so that clearly invalid mnemonic_ids can be completely skipped
     @staticmethod
     def verify_mnemonic_syntax(mnemonic_ids):
-        return len(mnemonic_ids) == 12 and None not in mnemonic_ids
+        return len(mnemonic_ids) in [12,24] and None not in mnemonic_ids
 
     # This is the time-consuming function executed by worker thread(s). It returns a tuple: if a mnemonic
     # is correct return it, else return False for item 0; return a count of mnemonics checked for item 1
@@ -602,7 +648,7 @@ class WalletElectrum1(WalletBase):
 
             # Compute the binary seed from the word list the Electrum1 way
             seed = ""
-            for i in range(0, 12, 3):
+            for i in range(0, len(mnemonic_ids), 3):
                 seed += "{:08x}".format( mnemonic_ids[i    ]
                      + num_words  * (   (mnemonic_ids[i + 1] - mnemonic_ids[i    ]) % num_words )
                      + num_words2 * (   (mnemonic_ids[i + 2] - mnemonic_ids[i + 1]) % num_words ))
@@ -657,7 +703,11 @@ class WalletElectrum1(WalletBase):
     # Configures the values of four globals used later in config_btcrecover():
     # mnemonic_ids_guess, close_mnemonic_ids, num_inserts, and num_deletes
     @classmethod
-    def config_mnemonic(cls, mnemonic_guess = None, closematch_cutoff = 0.65):
+    def config_mnemonic(cls, mnemonic_guess = None, closematch_cutoff = 0.65, expected_len = None):
+        if expected_len:
+            if expected_len not in [12,24]:
+                raise ValueError("Electrum1 mnemoincs can only be 12 or 24 words lon")
+
         # If a mnemonic guess wasn't provided, prompt the user for one
         if not mnemonic_guess:
             init_gui()
@@ -694,9 +744,36 @@ class WalletElectrum1(WalletBase):
                           "    trying all possible seed words here instead.".format(word))
                 mnemonic_ids_guess += None,
 
+        guess_len = len(mnemonic_ids_guess)
+        if not expected_len:
+            if guess_len < 12:
+                expected_len = 12
+            elif guess_len > 24:
+                expected_len = 24
+            else:
+                off_by = guess_len % 3
+                if off_by == 0: # If the supplied guess is a valid length, assume that all words have been supplied
+                    expected_len = guess_len
+                else: # If less words have been supplied, round up to the nearest valid seed length (Assume words are missing by default)
+                    expected_len = guess_len + 3 - off_by
+
+            print("Assuming a", expected_len, "word mnemonic. (This can be overridden with --mnemonic-length)")
+
         global num_inserts, num_deletes
-        num_inserts = max(12 - len(mnemonic_ids_guess), 0)
-        num_deletes = max(len(mnemonic_ids_guess) - 12, 0)
+        num_inserts = max(expected_len - len(mnemonic_ids_guess), 0)
+        num_deletes = max(len(mnemonic_ids_guess) - expected_len, 0)
+        if num_inserts:
+            print(
+                "Seed sentence was too short, inserting {} word{} into each guess.".format(
+                    num_inserts, "s" if num_inserts > 1 else ""
+                )
+            )
+        if num_deletes:
+            print(
+                "Seed sentence was too long, deleting {} word{} from each guess.".format(
+                    num_deletes, "s" if num_deletes > 1 else ""
+                )
+            )
         if num_inserts:
             print("Seed sentence was too short, inserting {} word{} into each guess."
                   .format(num_inserts, "s" if num_inserts > 1 else ""))
@@ -774,7 +851,10 @@ class BlockChainPassword(WalletBase):
             init_gui()
             if tk_root:
                 expected_len = tk.simpledialog.askinteger("Blockchain Legacy Wallet Recovery Mnemonic number of words",
-                    "Please enter your best guess for number of words in your BitcoinPassword seed:")
+                    "Please enter your best guess for number of words in your BitcoinPassword seed "
+                    "\n(Defaults to the number of words you entered on the previous step):",
+                                                          minvalue=1,
+                                                          initialvalue=len(mnemonic_guess.split(" ")))
             else:
                 print("No number of words specified... Exiting...")
                 exit()
@@ -953,12 +1033,21 @@ class BlockChainPasswordV3(BlockChainPassword):
             raise ValueError('Invalid Mnemonic Checksum. Please enter it carefully.')
 
         obj = {}
+        password_bytes = str_bytes
         if version == 4:
             guid_part = str_bytes[:16]
-            obj['guid'] = '-'.join([''.join('{:02x}'.format(b) for b in guid_part[i:i + 2]) for i in range(0, 16, 2)])
+            obj['guid'] = (
+                ''.join('{:02x}'.format(b) for b in guid_part[:4]) + '-' +
+                ''.join('{:02x}'.format(b) for b in guid_part[4:6]) + '-' +
+                ''.join('{:02x}'.format(b) for b in guid_part[6:8]) + '-' +
+                ''.join('{:02x}'.format(b) for b in guid_part[8:10]) + '-' +
+                ''.join('{:02x}'.format(b) for b in guid_part[10:])
+            )
+            password_bytes = str_bytes[16:]
         elif version == 5:
             obj['time'] = bytes_to_int(str_bytes[:4], 4)
-        obj['password'] = self.bytes_to_string(str_bytes)
+            password_bytes = str_bytes[4:]
+        obj['password'] = self.bytes_to_string(password_bytes)
         return obj
             
 @register_selectable_wallet_class("Blockchain.info Legacy Wallet Recovery Mnemonic v2")
@@ -1287,7 +1376,10 @@ class WalletBIP32(WalletBase):
             _derive_seed_list = self._derive_seed(mnemonic_ids)
 
             for derived_seed, salt in _derive_seed_list:
-                seed_bytes = hmac.new("Bitcoin seed".encode('utf-8'), derived_seed, hashlib.sha512).digest()
+                if type(self) is not WalletXLM:
+                    seed_bytes = hmac.new("Bitcoin seed".encode('utf-8'), derived_seed, hashlib.sha512).digest()
+                else:
+                    seed_bytes = derived_seed
 
                 if self._verify_seed(seed_bytes, salt):
                     return mnemonic_ids, count  # found it
@@ -1323,8 +1415,10 @@ class WalletBIP32(WalletBase):
             results = zip(cleaned_mnemonic_ids_list,clResult)
 
             for cleaned_mnemonic, derived_seed in results:
-                seed_bytes = hmac.new("Bitcoin seed".encode('utf-8'), derived_seed,
-                                      hashlib.sha512).digest()
+                if type(self) is not WalletXLM:
+                    seed_bytes = hmac.new("Bitcoin seed".encode('utf-8'), derived_seed, hashlib.sha512).digest()
+                else:
+                    seed_bytes = derived_seed
 
                 if self._verify_seed(seed_bytes, salt):
                     if isinstance(mnemonic_ids_list[0], list):
@@ -1417,7 +1511,7 @@ class WalletBIP32(WalletBase):
                             global seedfoundpath
                             seedfoundpath = "m/"
                             for index in current_path_index:
-                                if index > 100:
+                                if index >= 2147483648:
                                     index -= 2 ** 31
                                     seedfoundpath += str(index) + "'"
                                 else:
@@ -1470,7 +1564,8 @@ class WalletBIP39(WalletBIP32):
             for filename in glob.iglob(os.path.join(wordlists_dir, name + "-??*.txt")):
                 wordlist_langs.append(os.path.basename(filename)[len(name)+1:-4])  # e.g. "en", or "zh-hant"
         for lang in wordlist_langs:
-            assert lang not in cls._language_words, "wordlist not already loaded"
+            if lang in cls._language_words:
+                continue
             cls._language_words[lang] = load_wordlist(name, lang)
 
     @property
@@ -1738,7 +1833,6 @@ class WalletBIP39(WalletBIP32):
         # Note: the words are already in BIP39's normalized form
         seedList = []
         for salt in self._derivation_salts:
-
             seedList.append(btcrpass.pbkdf2_hmac("sha512", " ".join(mnemonic_words).encode('utf-8'), b"mnemonic" + salt, 2048))
 
         return zip(seedList,self._derivation_salts)
@@ -1844,10 +1938,16 @@ class WalletElectrum2(WalletBIP39):
     @classmethod
     def _load_wordlists(cls):
         assert not cls._language_words, "_load_wordlists() should only be called once from the first init()"
+        # Load all standard BIP39 wordlists first so Electrum2-specific
+        # lists cannot overwrite them if they share the same language code
+        cls._do_load_wordlists("bip39")
         cls._do_load_wordlists("electrum2")
-        cls._do_load_wordlists("bip39", ("en", "es", "ja", "zh-hans"))  # only the four bip39 ones used by Electrum2
+        for lang in list(cls._language_words):
+            words = cls._language_words[lang]
+            if len(words) == 2048 and lang in ("en", "es", "fr", "it", "pt", "cs"):
+                cls._language_words[lang + cls.FIRSTFOUR_TAG] = [w[:4] for w in words]
         assert all(len(w) >= 1411 for w in cls._language_words.values()), \
-               "Electrum2 wordlists are at least 1411 words long" # because we assume a max mnemonic length of 13
+               "Electrum2 wordlists are at least 1411 words long"  # because we assume a max mnemonic length of 13
 
     def __init__(self, path = None, loading = False):
         # Just calls WalletBIP39.__init__() with default Electrum path if none specified
@@ -3236,6 +3336,210 @@ class WalletStacks(WalletBIP39):
             hash160s.add(binascii.unhexlify(hash160))
         return hash160s
 
+@register_selectable_wallet_class("Stellar (XLM) BIP39")
+class WalletXLM(WalletBIP39):
+    def __init__(self, path=None, loading=False):
+        # Use Stellar's default derivation path if none specified
+        if not path: path = ["m/44'/148'"]
+        super(WalletXLM, self).__init__(path, loading)
+
+    def _verify_seed(self, arg_seed_bytes, passphrase=None):
+        try:
+            from slip10 import SLIP10, HARDENED_INDEX
+        except ImportError:
+            exit(
+                "\nERROR: Cannot Load slip10, install it via pip3 install slip10")
+
+        try:
+            from stellar_sdk import Keypair
+        except ImportError:
+            exit(
+                "\nERROR: Cannot Load stellar_sdk, install it via pip3 install stellar_sdk")
+
+        """
+        Verify whether BIP39-derived seed bytes match a known Stellar address.
+        Uses SLIP-0010 / Ed25519 via Trezor python-slip10.
+        """
+        if passphrase:
+            testSaltList = [passphrase]
+        else:
+            testSaltList = self._derivation_salts
+
+        for salt in testSaltList:
+
+            for account_index in range(self._address_start_index, self._address_start_index + self._addrs_to_generate):
+
+                # Initialize SLIP10 with Ed25519 curve
+                slip = SLIP10.from_seed(arg_seed_bytes, curve_name="ed25519")
+
+                # Stellar increments addresses on what is normally the account index. All addresses are also hardened...
+                bip, coin = self._path_indexes[0]
+                path = [
+                    bip,
+                    coin,
+                    account_index + HARDENED_INDEX
+                ]
+
+                derived = slip.get_child_from_path(path)
+
+                # Extract private key (32 bytes)
+                privkey = derived.get_privkey_from_path([])
+
+                # Derive Stellar address (G...)
+                kp = Keypair.from_raw_ed25519_seed(privkey)
+                pubkey = kp.raw_public_key()
+
+                # Check for match
+                if pubkey in self._known_hash160s:
+                    if salt and len(self._derivation_salts) > 1:
+                        print("Passphrase:", salt.decode())
+                    return True
+
+        return False
+
+    def _addresses_to_hash160s(self, addresses):
+        """
+        Override for Stellar: Just store the pubkey (despite the function name)
+        """
+        try:
+            from stellar_sdk import StrKey
+        except ImportError:
+            exit(
+                "\nERROR: Cannot Load stellar_sdk, install it via pip3 install stellar_sdk")
+
+        hash160s = []
+
+        for addr in addresses:
+            try:
+                pubkey_bytes = StrKey.decode_ed25519_public_key(addr)
+                hash160s.append(pubkey_bytes)
+            except Exception as e:
+                print(f"Warning: Could not decode Stellar address '{addr}': {e}")
+                continue
+
+        return hash160s
+
+############### SLIP39 Seed Share ###############
+
+@register_selectable_wallet_class("SLIP39 Seed Share")
+class WalletSLIP39Seed(WalletBase):
+    """Wallet class used to validate SLIP39 shares.
+
+    This class allows :mod:`seedrecover.py` to recover SLIP39 shares with
+    typographical errors.  It validates guesses using the ``shamir-mnemonic``
+    library without requiring any address checking.
+    """
+
+    _words = None
+
+    def __init__(self, path=None, loading=False):
+        if not shamir_mnemonic_available:
+            print()
+            print(
+                "ERROR: Cannot import shamir_mnemonic which is required for SLIP39 share recovery, install it via 'pip3 install shamir-mnemonic[cli]'"
+            )
+            exit()
+        super(WalletSLIP39Seed, self).__init__(loading)
+
+    @classmethod
+    def _load_wordlist(cls):
+        if not cls._words:
+            from shamir_mnemonic import wordlist as sw
+            cls._words = tuple(sw.WORDLIST)
+            cls._word_to_id = {word: idx for idx, word in enumerate(cls._words)}
+
+    @property
+    def word_ids(self):
+        return range(len(self._words))
+
+    @classmethod
+    def id_to_word(cls, idx):
+        return cls._words[idx]
+
+    @classmethod
+    def config_mnemonic(cls, mnemonic_guess=None, closematch_cutoff=0.65, expected_len=None):
+        """Configure globals for SLIP39 share recovery."""
+        if not mnemonic_guess:
+            init_gui()
+            if tk_root:
+                mnemonic_guess = tk.simpledialog.askstring(
+                    "SLIP39 share", "Please enter your best guess for the SLIP39 share:")
+            else:
+                print("No mnemonic guess specified... Exiting...")
+                exit()
+            if not mnemonic_guess:
+                sys.exit("canceled")
+
+        cls._load_wordlist()
+        mnemonic_guess = str(mnemonic_guess)
+
+        global mnemonic_ids_guess, close_mnemonic_ids, num_inserts, num_deletes
+        mnemonic_ids_guess = ()
+        close_mnemonic_ids = {}
+        for word in mnemonic_guess.lower().split():
+            close_words = difflib.get_close_matches(word, cls._words, sys.maxsize, closematch_cutoff)
+            if close_words:
+                if close_words[0] != word:
+                    print(f"'{word}' was in your guess, but it's not a valid SLIP39 word;\n    trying '{close_words[0]}' instead.")
+                mnemonic_ids_guess += cls._word_to_id[close_words[0]],
+                close_mnemonic_ids[mnemonic_ids_guess[-1]] = tuple((cls._word_to_id[w],) for w in close_words[1:])
+            else:
+                if word != 'seed_token_placeholder':
+                    print(f"'{word}' was in your guess, but there is no similar SLIP39 word;\n    trying all possible seed words here instead.")
+                mnemonic_ids_guess += None,
+
+        guess_len = len(mnemonic_ids_guess)
+        if expected_len is None:
+            expected_len = max(guess_len, slip39_min_words)
+            if guess_len > 28:
+                expected_len = 33
+            print(
+                "Assuming a",
+                expected_len,
+                "word share. (This can be overridden with --share-length)",
+            )
+
+        num_inserts = max(expected_len - len(mnemonic_ids_guess), 0)
+        num_deletes = max(len(mnemonic_ids_guess) - expected_len, 0)
+
+    @classmethod
+    def create_from_params(cls, *args, **kwargs):
+        self = cls(loading=True)
+        self._load_wordlist()
+        return self
+
+    # Performs basic checks so that clearly invalid mnemonic_ids can be skipped
+    @staticmethod
+    def verify_mnemonic_syntax(mnemonic_ids):
+        return (
+            len(mnemonic_ids)
+            == len(mnemonic_ids_guess) + num_inserts - num_deletes
+            and None not in mnemonic_ids
+        )
+
+    def passwords_per_seconds(self, seconds):
+        return max(int(seconds * 1000), 1)
+
+    def _verify_checksum(self, mnemonic_ids):
+        from shamir_mnemonic.share import Share
+        try:
+            Share.from_mnemonic(" ".join(self.id_to_word(i) for i in mnemonic_ids))
+            return True
+        except Exception:
+            return False
+
+    def return_verified_password_or_false(self, mnemonic_ids_list):
+        for count, mnemonic_ids in enumerate(mnemonic_ids_list, 1):
+            if None not in mnemonic_ids and self._verify_checksum(mnemonic_ids):
+                return mnemonic_ids, count
+        return False, count
+
+    def performance_iterator(self):
+        """Generate infinite SLIP39 share guesses for performance testing."""
+        length = len(mnemonic_ids_guess) + num_inserts - num_deletes
+        prefix = tuple(random.randrange(len(self._words)) for _ in range(max(length - 4, 0)))
+        for guess in itertools.product(range(len(self._words)), repeat=min(length, 4)):
+            yield prefix + guess
 ################################### Main ###################################
 
 tk_root = None
@@ -3514,6 +3818,8 @@ def main(argv):
         parser.add_argument("--language",    metavar="LANG-CODE",       help="the wordlist language to use (see wordlists/README.md, default: auto)")
         parser.add_argument("--bip32-path",  metavar="PATH", nargs="+",           help="path (e.g. m/0'/0/) excluding the final index. You can specify multiple derivation paths seperated by a space Eg: m/84'/0'/0'/0 m/84'/0'/1'/0 (default: BIP44,BIP49 & BIP84 account 0)")
         parser.add_argument("--substrate-path",  metavar="PATH", nargs="+",           help="Substrate path (eg: //hard/soft). You can specify multiple derivation paths by a space Eg: //hard /soft //hard/soft (default: No Path)")
+        parser.add_argument("--slip39", action="store_true", help="recover a SLIP39 seed share")
+        parser.add_argument("--share-length", type=int, metavar="WORD-COUNT", help="the length of the SLIP39 share (default: auto)")
         parser.add_argument("--checksinglexpubaddress", action="store_true", help="Check non-standard single address wallets (Like Atomic, MyBitcoinWallet, PT.BTC")
         parser.add_argument("--force-p2sh",  action="store_true",   help="Force checking of P2SH segwit addresses for all derivation paths (Required for devices like CoolWallet S if if you are using P2SH segwit accounts on a derivation path that doesn't start with m/49')")
         parser.add_argument("--force-p2tr",  action="store_true",   help="Force checking of P2TR (Taproot) addresses for all derivation paths (Required for wallets like Bitkeep/Bitget that put all accounts on  m/44')")
@@ -3524,7 +3830,7 @@ def main(argv):
         parser.add_argument("--worker",      metavar="ID#(ID#2, ID#3)/TOTAL#",   help="divide the workload between TOTAL# servers, where each has a different ID# between 1 and TOTAL# (You can optionally assign between 1 and TOTAL IDs of work to a server (eg: 1,2/3 will assign both slices 1 and 2 of the 3 to the server...)")
         parser.add_argument("--max-eta",     type=int,              help="max estimated runtime before refusing to even start (default: 168 hours, i.e. 1 week)")
         parser.add_argument("--no-eta",      action="store_true",   help="disable calculating the estimated time to completion")
-        parser.add_argument("--no-dupchecks",action="store_true",   help="disable duplicate guess checking to save memory")
+        parser.add_argument("--no-dupchecks", "-d", action="count", default=0, help="disable duplicate guess checking to save memory; specify up to four times for additional effect")
         parser.add_argument("--no-progress", action="store_true",   help="disable the progress bar")
         parser.add_argument("--no-pause",    action="store_true",   help="never pause before exiting (default: auto)")
         parser.add_argument("--no-gui", action="store_true", help="Force disable the gui elements")
@@ -3603,13 +3909,15 @@ def main(argv):
             args.addrs = ['1QLSbWFtVNnTFUq5vxDRoCpvvsSqTTS88P']
             args.addr_limit = 1
             args.no_eta = True
-            args.no_dupchecks = True
+            args.no_dupchecks = 4
             if args.wallet_type:
                 if args.wallet_type.lower() == "ethereum":
                     args.wallet_type = "bip39"
 
         # Look up the --wallet-type arg in the list of selectable_wallet_classes
-        if args.wallet_type:
+        if args.slip39:
+            wallet_type = WalletSLIP39Seed
+        elif args.wallet_type:
             if args.wallet:
                 print("warning: --wallet-type is ignored when a wallet is provided", file=sys.stderr)
             else:
@@ -3741,7 +4049,6 @@ def main(argv):
                 phase["passwordlist"] = args.seedlist
 
             if args.wallet_type == "electrum1":
-                args.mnemonic_length = None
                 args.language = None
 
         if args.language:
@@ -3749,6 +4056,9 @@ def main(argv):
 
         if args.mnemonic_length is not None:
             config_mnemonic_params["expected_len"] = args.mnemonic_length
+
+        if args.share_length is not None:
+            config_mnemonic_params["expected_len"] = args.share_length
 
         if args.bip32_path and not args.pathlist:
             if args.wallet:
@@ -3785,10 +4095,16 @@ def main(argv):
             if args.__dict__[argkey] is not None:
                 extra_args.extend(("--"+argkey.replace("_", "-"), str(args.__dict__[argkey])))
 
+
         # These arguments (which have no values) are passed on to btcrpass.parse_arguments()
-        for argkey in "no_eta", "no_dupchecks", "no_progress":
+        for argkey in "no_eta", "no_progress":
             if args.__dict__[argkey]:
                 extra_args.append("--"+argkey.replace("_", "-"))
+
+        # Special Case for --no-dupchecks
+        if args.__dict__["no_dupchecks"] is not None:
+            for i in range(0, args.__dict__["no_dupchecks"]):
+                extra_args.append("--no-dupchecks")
 
         if args.performance:
             create_from_params["is_performance"] = phase["is_performance"] = True
@@ -4112,6 +4428,11 @@ def show_mnemonic_gui(mnemonic_sentence, path_coin):
     tk.Label(text="WARNING: seed information is sensitive, carefully protect it and do not share", fg="red") \
         .pack(padx=padding, pady=padding)
     tk.Label(text="Seed found:").pack(padx=padding, pady=padding)
+    if isinstance(loaded_wallet, WalletSLIP39Seed):
+        tk.Label(
+            text="NOTE: SLIP39 seed recovery matches checksums, so needs to be manually verified",
+            fg="red",
+        ).pack(padx=padding, pady=padding)
 
     entry = tk.Entry(width=120, readonlybackground="white")
     entry.insert(0, mnemonic_sentence)

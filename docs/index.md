@@ -44,6 +44,7 @@ If you have found a bug, please open an issue on Github here: [https://github.co
     * Zilliqa
     * And many other 'Bitcoin Like' cryptos
  * SLIP39 Passphrase Recovery for most coins supported by the Trezor T
+ * SLIP39 Seed Share recovery with `seedrecover.py`
     * Bitcoin
     * Bitcoin Cash
     * Dash
@@ -92,8 +93,9 @@ If you have found a bug, please open an issue on Github here: [https://github.co
      * [mSIGNA (CoinVault)](https://ciphrex.com/products/)
      * [Blockchain.com](https://blockchain.com/wallet)
      * [block.io](https://block.io/) (Recovery of wallet "Secret PIN")
-     * [pywallet --dumpwallet](https://github.com/jackjack-jj/pywallet) of Bitcoin Unlimited/Classic/XT/Core wallets
-     * [Bitcoin Wallet for Android/BlackBerry](https://play.google.com/store/apps/details?id=de.schildbach.wallet) spending PINs and encrypted backups
+     * [btc.com (aka blocktrail)](btc.com) (Recovery of wallet password, needed to decrypt the PDF backup sheets)
+     * [pywallet --dumpwallet](https://github.com/jackjack-jj/pywallet) o*f Bitcoin Unlimited/Classic/XT/Core wallets
+     * [Bitcoin Wallet for Android/BlackBerry](https://play.google.com/store/apps/details?id=de.schil*dbach.wallet) spending PINs and encrypted backups
      * [KnC Wallet for Android](https://github.com/kncgroup/bitcoin-wallet) encrypted backups
      * [Bither](https://bither.net/)
  * Altcoin password recovery support for most wallets derived from one of those above, including:
@@ -111,6 +113,7 @@ If you have found a bug, please open an issue on Github here: [https://github.co
      * [Yoroi Wallet for Cardano](https://yoroi-wallet.com/#/) Master_Passwords extracted from the wallet data (In browser or on rooted/jailbroken phones)
      * [Damaged Raw Eth Private Keys]() Individual Private keys that are missing characters.
      * [Ethereum UTC Keystore Files](https://myetherwallet.com) Ethereum Keystore files, typically used by wallets like MyEtherWallet, MyCrypto, etc. (Also often used by Eth clones like Theta, etc)
+     * [Toastwallet](https://toastwallet.github.io/browser/) Toastwallet Passphrase
  * [Free and Open Source](http://en.wikipedia.org/wiki/Free_and_open-source_software) - anyone can download, inspect, use, and redistribute this software
  * Supported on Windows, Linux, and OS X
  * Support for Unicode passwords and seeds

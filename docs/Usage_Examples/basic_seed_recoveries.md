@@ -117,3 +117,33 @@ One missing word, address generation limit of 2. (So address needs to be in the 
 ```
 python seedrecover.py --wallet-type elrond --addrs erd16jn439kmwgqj9j0xjnwk2swg0p7j2jrnvpp4p7htc7wypnx27ttqe9l98m --mnemonic "agree process hard hello artefact govern obtain wedding become robust fish bar alcohol about speak unveil mind bike shift latin pole base ugly artefact" --addr-limit 2
 ```
+
+### Basic Electrum Legacy Recoveries
+One wrong word, address generation limit of 2. (So address needs to be in the first account)
+```
+python seedrecover.py --wallet-type electrum1 --addrs 1Pw1yjF5smzg6eWbE2LbFm7fr1zq7WUYc7 --mnemonic "milk hungry group sound Lift Connect throw rabbit gift leg new lady pie government swear flat dove imagination sometime prepare lot trembl alone bus" --addr-limit 2
+```
+
+### Basic Stellar(XLM) Recoveries
+One wrong word, address generation limit of two.
+```
+python seedrecover.py --mnemonic "doctor giant eternal huge improve suit service poem logic dynamic crane summer exhibit describe later suit dignity ahead unknown fall syrup mirror nurse" --addrs GAV7E2PHIPDS3PM3BWN6DIHC623ONTZUDGXPJ7TT3EREYJRLTMENCK6Z --addr-limit 2 --no-eta --wallet-type xlm
+```
+
+## SLIP39 Share Recovery
+`seedrecover.py` can also help fix a damaged SLIP39 share. Supply your best guess of the share and allow the tool to search for close matches.
+
+```
+python seedrecover.py --slip39 --mnemonic "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard adjust muscle parcel sled crucial amazing mansion losing" --typos 2
+```
+
+The tool can also recover shares with missing words. For example, omitting the last
+word of the same share still succeeds:
+
+```
+python seedrecover.py --slip39 --mnemonic "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard adjust muscle parcel sled crucial amazing mansion" --big-typos 2
+```
+
+If the share is longer than twenty-eight words, `seedrecover.py` assumes it is a
+thirty-three word share. You can override this by supplying
+`--share-length WORDS`.

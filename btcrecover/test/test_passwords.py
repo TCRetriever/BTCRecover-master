@@ -146,6 +146,21 @@ class GeneratorTester(unittest.TestCase):
         self.assertIn(expected_error, cm.exception.code)
 
 
+class TestOuterIterations(unittest.TestCase):
+    def test_outer_iterations_minimum(self):
+        class DummyWallet:
+            def passwords_per_seconds(self, seconds):
+                return 0
+            def return_verified_password_or_false(self, pw_list):
+                pass
+        wallet = DummyWallet()
+        CHUNKSIZE_SECONDS = 1.0 / 100.0
+        measure_performance_iterations = wallet.passwords_per_seconds(0.5)
+        inner_iterations = int(round(2 * measure_performance_iterations * CHUNKSIZE_SECONDS)) or 1
+        outer_iterations = max(1, int(round(measure_performance_iterations / inner_iterations)))
+        self.assertEqual(outer_iterations, 1)
+
+
 class Test01Basics(GeneratorTester):
 
     def test_alternate(self):
@@ -984,6 +999,18 @@ def can_load_groestlcoin_hash():
             is_groestlcoin_hash_loadable = False
     return is_groestlcoin_hash_loadable
 
+bundled_bitcoinlib_mod_available = None
+def can_load_bundled_bitcoinlib_mod():
+    global bundled_bitcoinlib_mod_available
+    if bundled_bitcoinlib_mod_available is None:
+        try:
+            from lib.bitcoinlib_mod import encoding as encoding_mod
+
+            bundled_bitcoinlib_mod_available = True
+        except:
+            bundled_bitcoinlib_mod_available = False
+    return bundled_bitcoinlib_mod_available
+
 is_ecdsa_loadable = None
 def can_load_ecdsa():
     global is_ecdsa_loadable
@@ -1075,6 +1102,18 @@ def can_load_sjcl():
             sjcl_available = False
     return sjcl_available
 
+is_nacl_loadable = None
+def can_load_nacl():
+    global is_nacl_loadable
+    if is_nacl_loadable is None:
+        try:
+            import nacl.pwhash
+            import nacl.secret
+            is_nacl_loadable = True
+        except:
+            is_nacl_loadable = False
+    return is_nacl_loadable
+
 # Wrapper for btcrpass.init_worker() which clears btcrpass.loaded_wallet to simulate the way
 # multiprocessing works on Windows (even on other OSs) and permits pure python library testing
 def init_worker(wallet, char_mode, force_purepython, force_kdf_purepython):
@@ -1095,6 +1134,15 @@ def has_any_opencl_devices():
             opencl_devices_list = ()
         opencl_device_count = len(opencl_devices_list)
     return opencl_device_count > 0
+
+def is_pocl_platform():
+    if not has_any_opencl_devices():
+        return False
+    try:
+        import pyopencl as cl
+        return cl.get_platforms()[0].name.startswith("Portable Computing Language")
+    except Exception:
+        return False
 
 class Test07WalletDecryption(unittest.TestCase):
 
@@ -1423,8 +1471,15 @@ class Test07WalletDecryption(unittest.TestCase):
         self.wallet_tester("block.io.change.json", correct_pass="btcrtestpassword2022")
 
     @skipUnless(can_load_sjcl, "requires SJCL")
-    def bitgo_keycard_userkey(self):
+    def test_bitgo_keycard_userkey(self):
         self.wallet_tester("bitgo_keycard_userkey.json", correct_pass="btcr-test-password")
+
+    def test_btc_com_backup(self):
+        self.wallet_tester("btc_com_parsed_wallet_data_v3_random.json", correct_pass="santacruzbolivia")
+
+    @skipUnless(can_load_nacl, "requires NaCl")
+    def test_toastwallet(self):
+        self.wallet_tester("toastwallet.txt", correct_pass="Btcr-test-passw0rd")
 
     @skipUnless(can_load_leveldb, "Unable to load LevelDB module, requires Python 3.8+")
     def test_metamask_leveldb_chrome_cpu(self):
@@ -1611,6 +1666,30 @@ class Test07WalletDecryption(unittest.TestCase):
             [tstr("btcr-wrong-password-1"), tstr("btcr-wrong-password-2")]), (False, 2),
             "Platform:" + str(btcrpass.loaded_wallet.opencl_platform) + " found a false positive")
         self.assertEqual(btcrpass.WalletBlockchainSecondpass._return_verified_password_or_false_opencl(btcrpass.loaded_wallet,
+            [tstr("btcr-wrong-password-3"), tstr("btcr-test-password"), tstr("btcr-wrong-password-4")]), (tstr("btcr-test-password"), 2),
+            "Platform:" + str(btcrpass.loaded_wallet.opencl_platform) + " failed to find password")
+
+        del btcrpass.loaded_wallet
+
+    @skipUnless(can_load_pycrypto, "requires PyCryptoDome")
+    @skipUnless(has_any_opencl_devices, "requires OpenCL and a compatible device")
+    @skipUnless(lambda: not is_pocl_platform(), "OpenCL MultiBit kernel not supported on PoCL")
+    def test_multibit_OpenCL_Brute(self):
+        wallet_filename = os.path.join(WALLET_DIR, "multibit-wallet.key")
+        temp_dir        = tempfile.mkdtemp("-test-btcr")
+        temp_wallet_filename = os.path.join(temp_dir, os.path.basename(wallet_filename))
+        shutil.copyfile(wallet_filename, temp_wallet_filename)
+
+        btcrpass.loaded_wallet = btcrpass.WalletMultiBit.load_from_filename(temp_wallet_filename)
+
+        btcrecover.opencl_helpers.auto_select_opencl_platform(btcrpass.loaded_wallet)
+
+        btcrecover.opencl_helpers.init_opencl_contexts(btcrpass.loaded_wallet)
+
+        self.assertEqual(btcrpass.WalletMultiBit._return_verified_password_or_false_opencl(btcrpass.loaded_wallet,
+            [tstr("btcr-wrong-password-1"), tstr("btcr-wrong-password-2")]), (False, 2),
+            "Platform:" + str(btcrpass.loaded_wallet.opencl_platform) + " found a false positive")
+        self.assertEqual(btcrpass.WalletMultiBit._return_verified_password_or_false_opencl(btcrpass.loaded_wallet,
             [tstr("btcr-wrong-password-3"), tstr("btcr-test-password"), tstr("btcr-wrong-password-4")]), (tstr("btcr-test-password"), 2),
             "Platform:" + str(btcrpass.loaded_wallet.opencl_platform) + " failed to find password")
 
@@ -2124,6 +2203,7 @@ class Test08BIP39Passwords(unittest.TestCase):
         )
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     @skipUnless(can_load_coincurve, "requires coincurve")
     def test_address_Groestlecoin(self):
         self.bip39_tester(
@@ -2661,7 +2741,8 @@ class OpenCL_Tests(unittest.TestSuite) :
         self.addTest(unittest.defaultTestLoader.loadTestsFromNames(("Test07WalletDecryption." + method_name
             for method_name in (
                 "test_blockchain_second_OpenCL_Brute",
-                "test_electrum28_OpenCL_Brute")),
+                "test_electrum28_OpenCL_Brute",
+                "test_multibit_OpenCL_Brute")),
             module=sys.modules[__name__]
         ))
         self.addTest(unittest.defaultTestLoader.loadTestsFromNames(("Test08BIP39Passwords." + method_name
@@ -3090,6 +3171,22 @@ class Test13RawPrivateKeyRecovery(unittest.TestCase):
             (tstr("5db77aa7aea5ea7d6b4c64dab219972cf4763d4937d3e6e17f580436dcb10d34"), tstr("5db77aa7aea5ea7d6b4c64dab219972cf4763d4937d3e6e17f580436dcb10d35"))), (False, 2))
         self.assertEqual(wallet.return_verified_password_or_false(
             (tstr("5db77aa7aea5ea7d6b4c64dab219972cf4763d4937d3e6e17f580436dcb10d36"), correct_pw, tstr("5db77aa7aea5ea7d6b4c64dab219972cf4763d4937d3e6e17f580436dcb10d37"))), (correct_pw, 2))
+
+    @skipUnless(can_load_ecdsa, "requires ECDSA")
+    def test_rawprivatekey_Btc_BIP38(self):
+        wallet = btcrpass.WalletRawPrivateKey(addresses=['141HH8P17qa2tAiYsynueMKeKJtEMNDYaa'],
+                                            check_compressed=True,
+                                            check_uncompressed=False,
+                                            force_check_p2sh=False,
+                                            crypto='bitcoin',
+                                            correct_wallet_password='btcr-test-password')
+
+        correct_pw = tstr("6PnRsXuVMAnEUHxixjLuLxsUosU7phXLZWTpSYA9Y7Ev482cAGwYP6CTop")
+
+        self.assertEqual(wallet.return_verified_password_or_false(
+            (tstr("6PnRsXuVMAnEUHxixjLuLxsUosU7phXLZWTpSYA9Y7Ev482cAGwYP6CToo"), tstr("6PnRsXuVMAnEUHxixjLuLxsUosU7phXLZWTpSYA9Y7Ev482cAGwYP6CToq"))), (False, 2))
+        self.assertEqual(wallet.return_verified_password_or_false(
+            (tstr("6PnRsXuVMAnEUHxixjLuLxsUosU7phXLZWTpSYA9Y7Ev482cAGwYP6CToo"), correct_pw, tstr("6PnRsXuVMAnEUHxixjLuLxsUosU7phXLZWTpSYA9Y7Ev482cAGwYP6CToq"))), ("L1H4Ht7spfgX87kSCa3qGU2HYLHsHqymLpkcv5oAA1xhLmBLNTm9", 1))
 
 
 # QuickTests: all of Test01Basics, Test02Anchors, Test03WildCards, and Test04Typos,

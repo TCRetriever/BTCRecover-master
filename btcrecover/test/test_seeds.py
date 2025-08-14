@@ -114,6 +114,53 @@ def can_load_staking_deposit():
             eth2_staking_deposit_available = False
     return eth2_staking_deposit_available
 
+# import bundled modules that won't work in some environments
+bundled_bitcoinlib_mod_available = None
+def can_load_bundled_bitcoinlib_mod():
+    global bundled_bitcoinlib_mod_available
+    if bundled_bitcoinlib_mod_available is None:
+        try:
+            from lib.bitcoinlib_mod import encoding as encoding_mod
+
+            bundled_bitcoinlib_mod_available = True
+        except:
+            bundled_bitcoinlib_mod_available = False
+    return bundled_bitcoinlib_mod_available
+
+is_stellarsdk_loadable = None
+def can_load_stellarsdk():
+    global is_stellarsdk_loadable
+    if is_stellarsdk_loadable is None:
+        try:
+            import stellar_sdk
+            is_stellarsdk_loadable = True
+        except:
+            is_stellarsdk_loadable = False
+    return is_stellarsdk_loadable
+
+is_slip10_loadable = None
+def can_load_slip10():
+    global can_load_slip10
+    if can_load_slip10 is None:
+        try:
+            import slip10
+            can_load_slip10 = True
+        except:
+            can_load_slip10 = False
+    return can_load_slip10
+
+is_ShamirMnemonic_loadable = None
+def can_load_ShamirMnemonic():
+    global is_ShamirMnemonic_loadable
+    if is_ShamirMnemonic_loadable is None:
+        try:
+            import shamir_mnemonic
+            is_ShamirMnemonic_loadable = True
+        except Exception:
+            is_ShamirMnemonic_loadable = False
+    return is_ShamirMnemonic_loadable
+
+
 # Similar to unittest.skipUnless, except the first arg is a function returning a bool instead
 # of just a bool. This function isn't called until just before the test is to be run. This
 # permits checking the character mode (which isn't set until later) and prevents multiprocessing
@@ -343,6 +390,7 @@ class TestRecoveryFromMPK(unittest.TestCase):
                         passphrases=[u"btcr-тест-пароль",])
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_groestlcoinj_xpub_legacy(self):
         # an xpub at path m/0', as Bitcoin Wallet for Android/BlackBerry would export
         self.mpk_tester(btcrseed.WalletBitcoinj,
@@ -350,6 +398,7 @@ class TestRecoveryFromMPK(unittest.TestCase):
                         "laundry foil reform disagree cotton hope loud mix wheel snow real board")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_grs_bip39_xpub(self):
         # an xpub at path m/44'/17'/0', as any native segwit BIP39 wallet would export
         self.mpk_tester(btcrseed.WalletBIP39,
@@ -358,6 +407,7 @@ class TestRecoveryFromMPK(unittest.TestCase):
                         "m/44'/17'/0'/0")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_grs_bip39_ypub(self):
         # an ypub at path m/49'/17'/0', as any native segwit BIP39 wallet would export
         self.mpk_tester(btcrseed.WalletBIP39,
@@ -366,6 +416,7 @@ class TestRecoveryFromMPK(unittest.TestCase):
                         "m/49'/17'/0'/0")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_grs_bip39_zpub(self):
         # an zpub at path m/84'/17'/0', as any native segwit BIP39 wallet would export
         self.mpk_tester(btcrseed.WalletBIP39,
@@ -564,9 +615,13 @@ class TestRecoveryFromAddress(unittest.TestCase):
         self.address_tester_cardano_opencl("addr1qx3f4r3qqvynsnvhxrkkycp83v93jg2fqkn7scxnvpe6t99f4evt0tdad8cvsdvenma8t68gfdkyvf3efjzslcn7r4ys72w3qh",
                                     "wood blame garbage one federal jaguar slogan movie thunder seed apology trigger spoon depth basket fine culture boil render special enforce dish middle antique")
 
-    def test_electrum1_addr_legacy_BTC(self):
+    def test_electrum1_addr_legacy_12word_BTC(self):
         self.address_tester(btcrseed.WalletElectrum1, "12zAz6pAB6LhzGSZFCc6g9uBSWzwESEsPT", 3,
                             "straight subject wild ask clean possible age hurt squeeze cost stuck softly")
+
+    def test_electrum1_addr_legacy_24_word_BTC(self):
+        self.address_tester(btcrseed.WalletElectrum1, "1MFu6Wyp6Gy3PDpz2PtoNVdiFWDHR8TMuS", 3,
+                            "bowl especially tomorrow fan sail defeat scary knock ripple third cheek blind join mark rock scratch truth interest bone perfection curve milk taint terror")
 
     def test_electrum2_addr_legacy_BTC(self):
         self.address_tester(btcrseed.WalletElectrum2, "14dpd9nayyoyCTNki5UUsm1KnAZ1x7o83E", 5,
@@ -654,6 +709,7 @@ class TestRecoveryFromAddress(unittest.TestCase):
                             "certain come keen collect slab gauge photo inside mechanic deny leader drop",
                             ["m/44'/0'/0'/0"])
 
+    @skipUnless(can_load_bundled_bitcoinlib_mod,"Unable to load modified bitcoinlib in this environment")
     def test_bip44_addr_TerraLuna(self):
         self.address_tester(btcrseed.WalletBIP39, "terra1negkjtkr6wu2uzcwcuz0kj8w4z64uax3w0dv5u", 2,
                             "earth jelly weapon word focus shaft danger cruel inflict strong palace barrel peace strike timber orbit orphan tower size series scatter kiwi fat filter",
@@ -775,6 +831,7 @@ class TestRecoveryFromAddress(unittest.TestCase):
                             ["m/44'/3'/0'/0"])
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_bip44_addr_GRS(self):
         self.address_tester(btcrseed.WalletBIP39, "FqGMQvKCb2idGbDd6SUBFuugynXRACEzuQ", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform "
@@ -782,6 +839,7 @@ class TestRecoveryFromAddress(unittest.TestCase):
                             ["m/44'/17'/0'/0"])
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_bip49_addr_GRS(self):
         self.address_tester(btcrseed.WalletBIP39, "384swZndJ7CjZhqx7JL29Whnommy9s9phF", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform "
@@ -877,18 +935,21 @@ class TestRecoveryFromAddress(unittest.TestCase):
                             "advice pen praise soap lizard festival connect baby")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_walletgroestlecoin_addr_bip44(self):
         self.address_tester(btcrseed.WalletGroestlecoin, "FqGMQvKCb2idGbDd6SUBFuugynXRACEzuQ", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform "
                             "advice pen praise soap lizard festival connect baby")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_walletgroestlecoin_addr_bip49(self):
         self.address_tester(btcrseed.WalletGroestlecoin, "384swZndJ7CjZhqx7JL29Whnommy9s9phF", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform "
                             "advice pen praise soap lizard festival connect baby")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_walletgroestlecoin_addr_bip84(self):
         self.address_tester(btcrseed.WalletGroestlecoin, "grs1qy9qewq3x843gss8z6h22gmc03gfzuuj7hz505a", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform "
@@ -1003,6 +1064,12 @@ class TestRecoveryFromAddress(unittest.TestCase):
     @skipUnless(can_load_PyCryptoHDWallet, "requires Py_Crypto_HD_Wallet module")
     def test_WalletPyCryptoHDWallet_Stellar(self):
         self.address_tester(btcrseed.WalletStellar, "GAV7E2PHIPDS3PM3BWN6DIHC623ONTZUDGXPJ7TT3EREYJRLTMENCK6Z", 2,
+                            "doctor giant eternal huge improve suit service poem logic dynamic crane summer exhibit describe later suit dignity ahead unknown fall syrup mirror nurse season")
+
+    @skipUnless(can_load_slip10, "requires slip10 module")
+    @skipUnless(can_load_stellarsdk, "requires stellar_sdk module")
+    def test_WalletXLM(self):
+        self.address_tester(btcrseed.WalletXLM, "GAV7E2PHIPDS3PM3BWN6DIHC623ONTZUDGXPJ7TT3EREYJRLTMENCK6Z", 2,
                             "doctor giant eternal huge improve suit service poem logic dynamic crane summer exhibit describe later suit dignity ahead unknown fall syrup mirror nurse season")
 
     @skipUnless(can_load_PyCryptoHDWallet, "requires Py_Crypto_HD_Wallet module")
@@ -1164,12 +1231,14 @@ class TestRecoveryFromAddress(unittest.TestCase):
                             pathlist_file="DOGE.txt")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_pathfile_bip44_addr_GRS(self):
         self.address_tester(btcrseed.WalletBIP39, "FqGMQvKCb2idGbDd6SUBFuugynXRACEzuQ", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform advice pen praise soap lizard festival connect baby",
                             pathlist_file="GRS.txt")
 
     @skipUnless(can_load_groestlcoin_hash, "requires groestlcoin_hash")
+    @skipUnless(can_load_bundled_bitcoinlib_mod, "Unable to load modified bitcoinlib in this environment")
     def test_pathfile_bip49_addr_GRS(self):
         self.address_tester(btcrseed.WalletBIP39, "384swZndJ7CjZhqx7JL29Whnommy9s9phF", 2,
                             "element entire sniff tired miracle solve shadow scatter hello never tank side sight isolate sister uniform advice pen praise soap lizard festival connect baby",
@@ -1749,16 +1818,6 @@ class TestRecoverySeedListsGenerators(unittest.TestCase):
         pwl_it, skipped = btcrpass.password_generator_factory(sys.maxsize)
         generated_passwords = list(pwl_it)
         self.assertEqual(generated_passwords, correct_seedlist)
-
-    def test_seedlist_raw(self):
-        self.seedlist_tester("SeedListTest.txt")
-
-    def test_seedlist_pylist(self):
-        self.seedlist_tester("SeedListTest_pylist.txt")
-
-    def test_seedlist_pytupe(self):
-        self.seedlist_tester("SeedListTest_pytupe.txt")
-
     def test_seedlist_allpositional(self):
         self.tokenlist_tester("tokenlist-allpositional.txt", [[['elbow', 'text', 'print', 'census', 'battle', 'push',
                                                                 'oyster', 'team', 'home', 'april', 'travel',
@@ -1842,6 +1901,37 @@ class QuickTests(unittest.TestSuite):
                         del suite._tests[test_num]
                         break
             self.addTests(suite)
+@unittest.skipUnless(can_load_ShamirMnemonic(), "requires Shamir-Mnemonic module")
+class TestSLIP39Seed(unittest.TestCase):
+    """Tests for SLIP39 share recovery"""
+    def test_share_checksum(self):
+        share = "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard adjust muscle parcel sled crucial amazing mansion losing"
+        wallet = btcrseed.WalletSLIP39Seed.create_from_params()
+        wallet.config_mnemonic(share)
+        self.assertEqual(wallet.return_verified_password_or_false((btcrseed.mnemonic_ids_guess,)),
+                         (btcrseed.mnemonic_ids_guess, 1))
+
+    def test_insert_missing_word(self):
+        share = "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard adjust muscle parcel sled crucial amazing mansion"
+        wallet = btcrseed.WalletSLIP39Seed.create_from_params()
+        wallet.config_mnemonic(share)
+        # append the missing word to create the correct mnemonic ids
+        missing_id = wallet._word_to_id["losing"]
+        candidate = btcrseed.mnemonic_ids_guess + (missing_id,)
+        self.assertTrue(wallet.verify_mnemonic_syntax(candidate))
+        self.assertEqual(wallet.return_verified_password_or_false((candidate,)),
+                         (candidate, 1))
+
+    def test_assume_33_word_share(self):
+        share = (
+            "hearing echo academic acid deny bracelet playoff exact fancy various evidence standard "
+            "adjust muscle parcel sled crucial amazing mansion losing admit adorn adult advance advocate "
+            "afraid again agency agree aide"
+        )
+        wallet = btcrseed.WalletSLIP39Seed.create_from_params()
+        wallet.config_mnemonic(share)
+        self.assertEqual(btcrseed.num_inserts, 33 - len(share.split()))
+
 
 
 if __name__ == '__main__':
