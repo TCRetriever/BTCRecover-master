@@ -55,7 +55,7 @@ if __name__ == "__main__":
 		#print("XVG: DLZDT48wfuaHR47W4kU5PfW1JfJY25c9VJ")
 		print()
 		print("https://thecryptoretriever.com")
-		print(https://x.com/TCRetriever)
+		print("https://x.com/TCRetriever")
 		print("You may also consider donating to Gurnec, who created and maintained this tool until late 2017 @ 3Au8ZodNHPei7MQiSVAWb7NB2yqsb48GW4")
 		print()
 		btcrpass.safe_print("Password found: '" + password_found + "'")
