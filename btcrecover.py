@@ -54,12 +54,10 @@ if __name__ == "__main__":
 		#print("MONA: mona1q504vpcuyrrgr87l4cjnal74a4qazes2g9qy8mv ")
 		#print("XVG: DLZDT48wfuaHR47W4kU5PfW1JfJY25c9VJ")
 		print()
-		print("If this tool helped you to recover funds, please consider donating 1% of what you recovered:")
-		print("Contact us on Telegram if face any issue : https://t.me/TCRetriever ")
-		print("website : https://thecryptoretriever.com/ ")
-		print("https://www.youtube.com/@TCRetriever ")
-		print("BTC: 37N7B7sdHahCXTcMJgEnHz7YmiR4bEqCrS ")
-		
+		print("https://thecryptoretriever.com")
+		print(https://x.com/TCRetriever)
+		print("You may also consider donating to Gurnec, who created and maintained this tool until late 2017 @ 3Au8ZodNHPei7MQiSVAWb7NB2yqsb48GW4")
+		print()
 		btcrpass.safe_print("Password found: '" + password_found + "'")
 		if any(ord(c) < 32 or ord(c) > 126 for c in password_found):
 			print("HTML Encoded Password:   '" + password_found.encode("ascii", "xmlcharrefreplace").decode() + "'")
