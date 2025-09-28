@@ -25,40 +25,205 @@
 
 # PYTHON_ARGCOMPLETE_OK - enables optional bash tab completion
 
+import argparse
+import os
 import compatibility_check, copy
 
 from btcrecover import btcrseed
 import sys, multiprocessing
 
+
+def _parse_batch_arguments(argv):
+    """Extract batch specific arguments without disturbing btcrseed options."""
+
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--batch-worker",
+        metavar="ID(/ID2,...)/TOTAL",
+        help="split batch processing across workers, similar to seedrecover --worker",
+    )
+    parser.add_argument(
+        "--batch-file",
+        default="batch_seeds.txt",
+        metavar="FILE",
+        help="batch seed file to process (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--batch-progress-file",
+        metavar="FILE",
+        help="file to append completed seeds and their status (default: BATCH_FILE.progress)",
+    )
+    parser.add_argument(
+        "--batch-reverse",
+        action="store_true",
+        help="process the batch file in reverse order",
+    )
+    parser.add_argument(
+        "--batch-skip-completed",
+        action="store_true",
+        help="skip seeds already marked as CHECKED or MATCHED in the progress file",
+    )
+
+    parsed_args, remaining = parser.parse_known_args(argv[1:])
+    sys.argv = [argv[0]] + remaining
+
+    worker_ids = None
+    workers_total = None
+    progress_filename = parsed_args.batch_progress_file or f"{parsed_args.batch_file}.progress"
+
+    if os.path.abspath(progress_filename) == os.path.abspath(parsed_args.batch_file):
+        parser.error("progress file cannot be the same as the batch file")
+
+    if parsed_args.batch_worker:
+        try:
+            worker_part, total_part = parsed_args.batch_worker.split("/")
+            workers_total = int(total_part)
+        except ValueError:  # pragma: no cover - defensive programming
+            parser.error("--batch-worker must be formatted as ID(/ID2,...)/TOTAL")
+
+        if workers_total < 2:
+            parser.error("in --batch-worker ID#/TOTAL#, TOTAL# must be >= 2")
+
+        try:
+            worker_ids = [int(x) - 1 for x in worker_part.split(",")]
+        except ValueError:
+            parser.error("worker IDs must be integers")
+
+        if min(worker_ids) < 0:
+            parser.error("in --batch-worker ID#/TOTAL#, ID# must be >= 1")
+        if max(worker_ids) >= workers_total:
+            parser.error("in --batch-worker ID#/TOTAL#, ID# must be <= TOTAL#")
+
+    return (
+        parsed_args.batch_file,
+        progress_filename,
+        worker_ids,
+        workers_total,
+        parsed_args.batch_reverse,
+        parsed_args.batch_skip_completed,
+    )
+
+
+def _load_completed_seeds(progress_filename):
+    completed_status = {}
+    if not progress_filename:
+        return set()
+
+    success_statuses = {"MATCHED", "CHECKED"}
+
+    try:
+        with open(progress_filename, "r", encoding="utf-8") as progress_file:
+            for line in progress_file:
+                status, _, seed = line.partition("\t")
+                seed_value = seed.rstrip("\n")
+                if seed_value:
+                    completed_status[seed_value] = status
+    except FileNotFoundError:
+        return set()
+    except OSError as exc:  # pragma: no cover - defensive programming
+        print(
+            f"Unable to read progress file '{progress_filename}' to skip completed seeds: {exc}",
+            file=sys.stderr,
+        )
+
+    return {
+        seed
+        for seed, status in completed_status.items()
+        if status in success_statuses
+    }
+
+
+def _append_progress(progress_filename, seed, status):
+    if not progress_filename:
+        return
+
+    directory = os.path.dirname(progress_filename)
+    if directory:
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError as exc:  # pragma: no cover - defensive programming
+            print(
+                f"Unable to create directories for progress file '{progress_filename}': {exc}",
+                file=sys.stderr,
+            )
+            return
+
+    try:
+        with open(progress_filename, "a", encoding="utf-8") as progress_file:
+            progress_file.write(f"{status}\t{seed}\n")
+    except OSError as exc:  # pragma: no cover - defensive programming
+        print(f"Unable to update progress file '{progress_filename}': {exc}", file=sys.stderr)
+
 if __name__ == "__main__":
+    (
+        batch_filename,
+        progress_filename,
+        worker_ids,
+        workers_total,
+        process_reverse,
+        skip_completed,
+    ) = _parse_batch_arguments(sys.argv)
+
     print()
     print("Starting", btcrseed.full_version())
 
     btcrseed.register_autodetecting_wallets()
 
-    batch_seed_file = open("batch_seeds.txt", "r")
-    batch_seed_list = batch_seed_file.readlines()
+    try:
+        with open(batch_filename, "r", encoding="utf-8") as batch_seed_file:
+            batch_seed_list = batch_seed_file.readlines()
+    except OSError as exc:
+        print(f"Unable to open batch file '{batch_filename}': {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if process_reverse:
+        batch_seed_list = list(reversed(batch_seed_list))
+
+    completed_seeds = (
+        _load_completed_seeds(progress_filename) if skip_completed else set()
+    )
+
+    seed_index = 0
+    retval = 0
+
     for mnemonic in batch_seed_list:
         # Make a copy of the arguments
         temp_argv = copy.deepcopy(sys.argv)
 
-        # Skip comments
-        if mnemonic[0] == '#' or len(mnemonic.strip()) == 0:
+        stripped_line = mnemonic.strip()
+        if not stripped_line or stripped_line.startswith('#'):
             continue
+
+        seed_to_try = mnemonic.split("#")[0].strip()
+
+        if skip_completed and seed_to_try in completed_seeds:
+            seed_index += 1
+            continue
+
+        if worker_ids is not None:
+            if (seed_index % workers_total) not in worker_ids:
+                seed_index += 1
+                continue
+
+        seed_index += 1
 
         # Split seeds from any comments
         temp_argv.append("--mnemonic")
-        temp_argv.append(mnemonic.split("#")[0].strip())
+        temp_argv.append(seed_to_try)
 
-        print("Running Seed:", mnemonic.split("#")[0].strip())
+        print("Running Seed:", seed_to_try)
 
         try:
             mnemonic_sentence, path_coin = btcrseed.main(temp_argv[1:])
-        except:
+        except Exception:  # pragma: no cover - btcrseed failures are environment dependent
             print("Generated Exception...")
+            _append_progress(progress_filename, seed_to_try, "ERROR")
             continue
 
         if mnemonic_sentence:
+            _append_progress(progress_filename, seed_to_try, "MATCHED")
+            if skip_completed:
+                completed_seeds.add(seed_to_try)
             if not btcrseed.tk_root:  # if the GUI is not being used
                 print()
                 print(
@@ -104,9 +269,13 @@ if __name__ == "__main__":
             break
 
         elif mnemonic_sentence is None:
+            _append_progress(progress_filename, seed_to_try, "ERROR")
             retval = 1  # An error occurred or Ctrl-C was pressed inside btcrseed.main()
 
         else:
+            _append_progress(progress_filename, seed_to_try, "CHECKED")
+            if skip_completed:
+                completed_seeds.add(seed_to_try)
             retval = 0  # "Seed not found" has already been printed to the console in btcrseed.main()
 
         # Wait for any remaining child processes to exit cleanly (to avoid error messages from gc)
@@ -117,5 +286,4 @@ if __name__ == "__main__":
     for process in multiprocessing.active_children():
         process.join(1.0)
 
-    batch_seed_file.close()
     sys.exit(retval)
