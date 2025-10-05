@@ -516,6 +516,7 @@ def create_address_db(dbfilename, blockdir, table_len, startBlockDate="2019-01-0
             print("-------------------   ------------     -------------     -------------------")
             # e.g. blk00943.dat   255,212,706
 
+        exit_after_lastblockdate = False
         for filenum in itertools.count(first_filenum):
             filename = path.join(blockdir, "blk{:05}.dat".format(filenum))
             if not path.isfile(filename):
@@ -626,6 +627,11 @@ def create_address_db(dbfilename, blockdir, table_len, startBlockDate="2019-01-0
                     if xor_detected:
                         header = xor_at(header, xor_key, hdr_off)
 
+                    if blockDate > datetime.strptime(endBlockDate + " 23:59:59", '%Y-%m-%d %H:%M:%S'):
+                        # force exit
+                        header = b"\0\0"
+                        exit_after_lastblockdate = True
+
             if progress_bar:
                 block_bar_widgets[3] = progressbar.FormatLabel(" {:11,} addrs. %(elapsed)s, ".format(len(address_set))) # updates address count
                 nextval = progress_bar.currval + 1
@@ -635,6 +641,9 @@ def create_address_db(dbfilename, blockdir, table_len, startBlockDate="2019-01-0
             else:
                 print("   {:13,}".format(len(address_set)), end="")
                 print("    ", blockDate)
+
+            if exit_after_lastblockdate:
+                break
 
         if progress_bar:
             progress_bar.widgets.pop()  # remove the ETA
