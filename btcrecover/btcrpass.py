@@ -4001,7 +4001,6 @@ class WalletBIP38(object):
 # @register_wallet_class - not a "registered" wallet since there are no wallet files nor extracts
 class WalletBIP39(object):
     opencl_algo = -1
-
     def __init__(
         self,
         mpk=None,
