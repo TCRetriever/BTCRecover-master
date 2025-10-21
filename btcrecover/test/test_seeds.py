@@ -2028,22 +2028,128 @@ class TestRecoverySeedListsGenerators(unittest.TestCase):
                                      ('2', '3', '1'),
                                      ('1', '2', '3')]],
                               transformArgument = "--seed-transform-wordswaps 2")
-    def seed_transform_tester(self, correct_seedlist=None, transformArgument = None):
+
+    def test_seed_transforms_trezor_common_mistakes_1(self):
+        self.seed_transform_tester(
+            correct_seedlist=[
+                [
+                    ('able', 'across', 'age'),
+                    ('cable', 'across', 'age'),
+                    ('table', 'across', 'age'),
+                    ('able', 'cross', 'age'),
+                    ('able', 'across', 'cage'),
+                    ('able', 'across', 'page'),
+                    ('able', 'across', 'wage'),
+                ]
+            ],
+            transformArgument="--seed-transform-trezor-common-mistakes 1",
+            tokenlist_filename="Seed-Transform-Trezor.txt",
+        )
+
+    def test_seed_transforms_trezor_common_mistakes_2(self):
+        self.seed_transform_tester(
+            correct_seedlist=[
+                [
+                    ('able', 'across', 'age'),
+                    ('cable', 'across', 'age'),
+                    ('cable', 'cross', 'age'),
+                    ('cable', 'across', 'cage'),
+                    ('cable', 'across', 'page'),
+                    ('cable', 'across', 'wage'),
+                    ('table', 'across', 'age'),
+                    ('table', 'cross', 'age'),
+                    ('table', 'across', 'cage'),
+                    ('table', 'across', 'page'),
+                    ('table', 'across', 'wage'),
+                    ('able', 'cross', 'age'),
+                    ('able', 'cross', 'cage'),
+                    ('able', 'cross', 'page'),
+                    ('able', 'cross', 'wage'),
+                    ('able', 'across', 'cage'),
+                    ('able', 'across', 'page'),
+                    ('able', 'across', 'wage'),
+                ]
+            ],
+            transformArgument="--seed-transform-trezor-common-mistakes 2",
+            tokenlist_filename="Seed-Transform-Trezor.txt",
+        )
+    def seed_transform_tester(
+        self,
+        correct_seedlist=None,
+        transformArgument=None,
+        tokenlist_filename="Seed-Transform-Base.txt",
+    ):
         if correct_seedlist is None:
             correct_seedlist = self.expected_passwordlist
 
         # Check to see if the Token List file exists (and if not, skip)
-        if not os.path.isfile("./btcrecover/test/test-listfiles/Seed-Transform-Base.txt"):
-            raise unittest.SkipTest("requires ./btcrecover/test/test-listfiles/Seed-Transform-Base.txt")
+        tokenlist_path = "./btcrecover/test/test-listfiles/" + tokenlist_filename
+        if not os.path.isfile(tokenlist_path):
+            raise unittest.SkipTest("requires " + tokenlist_path)
 
-        args = (" --listpass --seedgenerator --max-tokens 1 --min-tokens 1 " + transformArgument).split()
+        if transformArgument is None:
+            transformArgument = ""
 
-        btcrpass.parse_arguments(["--tokenlist"] + ["./btcrecover/test/test-listfiles/Seed-Transform-Base.txt"] + args,
+        args = (
+            " --listpass --seedgenerator --max-tokens 1 --min-tokens 1 "
+            + transformArgument
+        ).split()
+
+        btcrpass.parse_arguments(["--tokenlist", tokenlist_path] + args,
                                  disable_security_warning_param=True)
 
         tok_it, skipped = btcrpass.password_generator_factory(sys.maxsize)
         generated_passwords = list(tok_it)
         self.assertEqual(generated_passwords, correct_seedlist)
+
+class TestPhaseTransforms(unittest.TestCase):
+    class DummyWallet:
+        def __init__(self, speed):
+            self._speed = speed
+
+        def passwords_per_seconds(self, _):
+            return self._speed
+
+    def test_wordswap_transform_preserves_default_typos(self):
+        wallet = self.DummyWallet(100)
+        phases = btcrseed.build_search_phases(
+            wallet, {}, {"seed_transform_wordswaps": 2}
+        )
+
+        self.assertEqual(len(phases), 4)
+        self.assertTrue(all("typos" in phase for phase in phases))
+        self.assertTrue(
+            all(phase["seed_transform_wordswaps"] == 2 for phase in phases)
+        )
+
+    def test_trezor_transform_preserves_default_typos(self):
+        wallet = self.DummyWallet(1)
+        phases = btcrseed.build_search_phases(
+            wallet, {}, {"seed_transform_trezor_common_mistakes": 3}
+        )
+
+        self.assertEqual(len(phases), 5)
+        self.assertEqual(phases[0]["typos"], 1)
+        self.assertEqual(phases[1]["typos"], 2)
+        self.assertTrue(all("typos" in phase for phase in phases))
+        self.assertTrue(
+            all(
+                phase["seed_transform_trezor_common_mistakes"] == 3
+                for phase in phases
+            )
+        )
+
+    def test_custom_phase_keeps_typos_with_transform(self):
+        wallet = self.DummyWallet(50)
+        phase = {"typos": 3}
+        phases = btcrseed.build_search_phases(
+            wallet, phase, {"seed_transform_wordswaps": 1}
+        )
+
+        self.assertEqual(len(phases), 1)
+        self.assertIs(phases[0], phase)
+        self.assertEqual(phase["typos"], 3)
+        self.assertEqual(phase["seed_transform_wordswaps"], 1)
 
 # All seed tests except TestAddressSet.test_false_positives are quick
 class QuickTests(unittest.TestSuite):
